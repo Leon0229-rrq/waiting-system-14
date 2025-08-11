@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>じゃがバター予約</title>
+<style>
+body { font-size: 1.2em; padding: 10px; }
+button { padding: 8px 15px; margin-top: 5px; }
+</style>
+</head>
+<body>
+<h1>じゃがバター予約</h1>
+<p>現在の待ち人数: <span id="queue">-</span>人</p>
+<p>推定待ち時間: <span id="wait">-</span>分</p>
+
+<!-- 予約フォーム -->
+<div id="reservationSection">
+  <form id="reserveForm">
+    人数(最大3): <input type="number" id="people" min="1" max="3" required><br>
+    <button type="submit">予約する</button>
+  </form>
+</div>
+
+<!-- 受付番号で予約確認 -->
+<div id="checkSection" style="margin-top:20px;">
+  <h3>予約確認・キャンセル</h3>
+  <form id="checkForm">
+    受付番号: <input type="number" id="checkNumber" required disabled>
+    <button type="submit" disabled>確認する</button>
+  </form>
+</div>
+
+<!-- 予約詳細表示 -->
+<div id="myInfo" style="display:none; margin-top:10px;">
+  <p>あなたの受付番号: <span id="myNumber"></span></p>
+  <p>予約人数: <span id="myPeople"></span>人</p>
+  <p>推定待ち時間: <span id="myWait"></span>分</p>
+  <button id="cancelBtn">予約キャンセル</button>
+</div>
+
+<script>
+const GAS_URL = "https://script.google.com/macros/s/AKfycbyftk9BIMXMeUgjjGd3W5qbQT0SYF9l5CeiSS5i4wtxSATWsKy3uZkGXrssOpUhhe6V/exec";
+let currentNumber = null;
+
+// 初期状態で受付番号入力欄と確認ボタンを無効化
+disableCheckInput();
+
+function loadStatus() {
+  fetch(GAS_URL)
+    .then(res => res.json())
+    .then(data => {
+      document.getElementById("queue").textContent = data.queueLength;
+      document.getElementById("wait").textContent = data.waitTime;
+    });
+}
+
+function showReservationInfo(number, wait, people) {
+  currentNumber = number;
+  document.getElementById("myNumber").textContent = number;
+  document.getElementById("myPeople").textContent = people;
+  document.getElementById("myWait").textContent = wait;
+  document.getElementById("reservationSection").style.display = "none";
+  document.getElementById("checkSection").style.display = "none";
+  document.getElementById("myInfo").style.display = "block";
+  enableCheckInput();
+}
+
+function enableCheckInput() {
+  document.getElementById("checkNumber").disabled = false;
+  document.querySelector("#checkForm button").disabled = false;
+}
+
+function disableCheckInput() {
+  document.getElementById("checkNumber").disabled = true;
+  document.querySelector("#checkForm button").disabled = true;
+  document.getElementById("checkNumber").value = "";
+}
+
+document.getElementById("reserveForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const people = Number(document.getElementById("people").value);
+  fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify({action: "reserve", people})
+  }).then(res => res.json()).then(r => {
+    if (r.status === "success") {
+      alert(`予約しました。受付番号: ${r.number}`);
+      showReservationInfo(r.number, r.waitTime, people);
+      loadStatus();
+    } else {
+      alert(r.message);
+    }
+  });
+});
+
+document.getElementById("checkForm").addEventListener("submit", e => {
+  e.preventDefault();
+  const num = document.getElementById("checkNumber").value;
+  fetch(`${GAS_URL}?number=${encodeURIComponent(num)}`)
+    .then(res => res.json())
+    .then(data => {
+      if (data.hasReservation) {
+        showReservationInfo(data.number, data.waitTime, data.people);
+      } else {
+        alert("該当する予約がありません");
+      }
+    });
+});
+
+document.getElementById("cancelBtn").addEventListener("click", () => {
+  if (!confirm("予約をキャンセルしますか？")) return;
+  fetch(GAS_URL, {
+    method: "POST",
+    body: JSON.stringify({action: "cancel", number: currentNumber})
+  }).then(res => res.json()).then(r => {
+    if (r.status === "success") {
+      alert("キャンセルしました");
+      currentNumber = null;
+      document.getElementById("myInfo").style.display = "none";
+      document.getElementById("reservationSection").style.display = "block";
+      document.getElementById("checkSection").style.display = "block";
+      disableCheckInput();
+      loadStatus();
+    } else {
+      alert(r.message);
+    }
+  });
+});
+
+loadStatus();
+setInterval(loadStatus, 10000);
+</script>
+</body>
+</html>
